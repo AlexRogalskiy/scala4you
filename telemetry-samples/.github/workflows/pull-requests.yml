@@ -1,0 +1,60 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [ master ]
+
+env:
+  LIGHTBEND_COMMERCIAL_MVN: ${{ secrets.LIGHTBEND_COMMERCIAL_MVN }}
+  LIGHTBEND_COMMERCIAL_IVY: ${{ secrets.LIGHTBEND_COMMERCIAL_IVY }}
+
+jobs:
+
+  validate-samples:
+    name: ${{ matrix.framework }} / ${{ matrix.language }} / ${{ matrix.buildtool }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: java
+            framework: akka
+            buildtool: mvn
+          - language: scala
+            framework: akka
+            buildtool: sbt
+          - language: java
+            framework: lagom
+            buildtool: sbt
+          - language: java
+            framework: lagom
+            buildtool: mvn
+          - language: scala
+            framework: lagom
+            buildtool: sbt
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/cache@v2
+        env:
+          cache-name: ${{ matrix.framework }}-dependencies-cache-${{ matrix.language }}
+        with:
+          path: |
+            ~/.m2
+            ~/.ivy2/cache
+            ~/.sbt
+            ~/.cache/coursier/v1
+          key: ${{ runner.os }}-${{ matrix.framework }}-${{ env.cache-name }}
+      - uses: AdoptOpenJDK/install-jdk@v1
+        name: Install AdoptOpenJDK 11
+        with:
+          version: "11"
+      - name: docker-compose up
+        run: |
+          pushd ${{ matrix.framework }}/shopping-cart-${{ matrix.language }} && docker-compose up -d && popd
+          sleep 30
+      - name: docker-compose ps
+        run: pushd ${{ matrix.framework }}/shopping-cart-${{ matrix.language }} && docker-compose ps && popd
+      - name: Run ${{ matrix.buildtool }} test
+        run: pushd ${{ matrix.framework }}/shopping-cart-${{ matrix.language }} && ${{ matrix.buildtool }} test && popd
+      - name: docker-compose down
+        run: pushd ${{ matrix.framework }}/shopping-cart-${{ matrix.language }} && docker-compose down && popd
